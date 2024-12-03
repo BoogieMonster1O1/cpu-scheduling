@@ -14,6 +14,7 @@ export interface GanttChartEntry {
 }
 
 export interface ProcessResult {
+    id: number;
     waitingTime: number;
     turnaroundTime: number;
     burstTime: number;

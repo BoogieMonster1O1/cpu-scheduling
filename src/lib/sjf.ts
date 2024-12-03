@@ -1,125 +1,54 @@
-import type { Process, ScheduleResult } from "$lib";
+import type { Process, ScheduleResult, GanttChartEntry, ProcessResult } from "$lib";
 
 export function scheduleNonPreemptiveSJF(queue: Process[]): ScheduleResult {
-    const ganttChart = [];
-    const processes = [];
+    let sortedQueue = [...queue].map((process, index) => ({ ...process, originalIndex: index }));
+    sortedQueue.sort((a, b) => {
+        if (a.arrivalTime === b.arrivalTime) {
+            return a.originalIndex - b.originalIndex;
+        }
+        return a.arrivalTime - b.arrivalTime;
+    });
+
+    const ganttChart: GanttChartEntry[] = [];
+    const results: ProcessResult[] = [];
     let currentTime = 0;
-    let totalWaitingTime = 0;
-    let totalTurnaroundTime = 0;
+    let waitingQueue: typeof sortedQueue = [];
 
-    queue.sort((a, b) => a.burstTime - b.burstTime);
+    while (sortedQueue.length > 0 || waitingQueue.length > 0) {
+        waitingQueue.push(...sortedQueue.filter(p => p.arrivalTime <= currentTime));
+        sortedQueue = sortedQueue.filter(p => p.arrivalTime > currentTime);
 
-    for (const process of queue) {
-        const startTime = Math.max(currentTime, process.arrivalTime);
-        const endTime = startTime + process.burstTime;
-        const waitingTime = startTime - process.arrivalTime;
-        const turnaroundTime = waitingTime + process.burstTime;
-
-        ganttChart.push({
-            process,
-            startTime,
-            endTime,
-        });
-
-        processes.push({
-            waitingTime,
-            turnaroundTime,
-            burstTime: process.burstTime,
-        });
-
-        currentTime = endTime;
-        totalWaitingTime += waitingTime;
-        totalTurnaroundTime += turnaroundTime;
-    }
-
-    const averageWaitingTime = totalWaitingTime / queue.length;
-    const averageTurnaroundTime = totalTurnaroundTime / queue.length;
-
-    return {
-        ganttChart,
-        processes,
-        averageWaitingTime,
-        averageTurnaroundTime,
-    };
-}
-
-export function schedulePreemptiveSJF(queue: Process[]): ScheduleResult {
-    const ganttChart = [];
-    const processes = [];
-    let currentTime = 0;
-    let totalWaitingTime = 0;
-    let totalTurnaroundTime = 0;
-
-    queue.sort((a, b) => a.arrivalTime - b.arrivalTime);
-
-    const remainingQueue = [...queue];
-    const readyQueue: Process[] = [];
-
-    while (remainingQueue.length > 0 || readyQueue.length > 0) {
-        if (readyQueue.length === 0) {
-            const nextProcess = remainingQueue.shift()!;
-            const startTime = Math.max(currentTime, nextProcess.arrivalTime);
-            const endTime = startTime + nextProcess.burstTime;
-            const waitingTime = startTime - nextProcess.arrivalTime;
-            const turnaroundTime = waitingTime + nextProcess.burstTime;
-
-            ganttChart.push({
-                process: nextProcess,
-                startTime,
-                endTime,
+        if (waitingQueue.length > 0) {
+            waitingQueue.sort((a, b) => {
+                if (a.burstTime === b.burstTime) {
+                    return a.originalIndex - b.originalIndex;
+                }
+                return a.burstTime - b.burstTime;
             });
 
-            processes.push({
-                waitingTime,
-                turnaroundTime,
-                burstTime: nextProcess.burstTime,
-            });
-
-            currentTime = endTime;
-            totalWaitingTime += waitingTime;
-            totalTurnaroundTime += turnaroundTime;
-        } else {
-            readyQueue.sort((a, b) => a.burstTime - b.burstTime);
-            const nextProcess = readyQueue.shift()!;
+            const currentProcess = waitingQueue.shift()!;
             const startTime = currentTime;
-            const endTime = startTime + 1;
-            const waitingTime = startTime - nextProcess.arrivalTime;
-            const turnaroundTime = waitingTime + nextProcess.burstTime;
+            const endTime = startTime + currentProcess.burstTime;
 
-            ganttChart.push({
-                process: nextProcess,
-                startTime,
-                endTime,
+            ganttChart.push({ process: currentProcess, startTime, endTime });
+
+            results.push({
+                id: currentProcess.id,
+                burstTime: currentProcess.burstTime,
+                waitingTime: startTime - currentProcess.arrivalTime,
+                turnaroundTime: endTime - currentProcess.arrivalTime,
             });
 
-            processes.push({
-                waitingTime,
-                turnaroundTime,
-                burstTime: nextProcess.burstTime,
-            });
-
-            nextProcess.burstTime -= 1;
             currentTime = endTime;
-            totalWaitingTime += waitingTime;
-            totalTurnaroundTime += turnaroundTime;
-
-            if (nextProcess.burstTime > 0) {
-                readyQueue.push(nextProcess);
-            }
-        }
-
-        while (remainingQueue.length > 0 && remainingQueue[0].arrivalTime <= currentTime) {
-            readyQueue.push(remainingQueue.shift()!);
+        } else {
+            currentTime++;
         }
     }
 
-    const averageWaitingTime = totalWaitingTime / queue.length;
-    const averageTurnaroundTime = totalTurnaroundTime / queue.length;
+    const averageWaitingTime =
+        results.reduce((sum, p) => sum + p.waitingTime, 0) / results.length;
+    const averageTurnaroundTime =
+        results.reduce((sum, p) => sum + p.turnaroundTime, 0) / results.length;
 
-    return {
-        ganttChart,
-        processes,
-        averageWaitingTime,
-        averageTurnaroundTime,
-    };
+    return { ganttChart, processes: results, averageWaitingTime, averageTurnaroundTime };
 }
