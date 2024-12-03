@@ -1,0 +1,14 @@
+@import 'tailwindcss/base';
+@import 'tailwindcss/components';
+@import 'tailwindcss/utilities';
+
+@font-face {
+    font-family: "San Francisco";
+    font-weight: 400;
+    src: url("/SF-Pro.ttf");
+}
+
+body {
+    font-family: "SF-Pro", "BlinkMacSystemFont", "San Francisco", sans-serif;
+    @apply bg-neutral-900 text-white;
+}
